@@ -11,10 +11,10 @@ def coletaDados(RUL_TETO = 125):
 
 
     #Leitura do arquivo de treino, usando 'espaços' como separador, indicando que não temos um header, e que vamos nomear cada coluna com as colunas inseridas na variavel 'col_nomes'
-    df = pd.read_csv('train_FD001.txt', sep=r'\s+', header=None, names=col_nomes)
-    df_teste = pd.read_csv('test_FD001.txt', sep=r'\s+', header=None, names=col_nomes)
+    df = pd.read_csv('CMAPSSData/train_FD001.txt', sep=r'\s+', header=None, names=col_nomes)
+    df_teste = pd.read_csv('CMAPSSData/test_FD001.txt', sep=r'\s+', header=None, names=col_nomes)
 
-    rul_verdadeiro = pd.read_csv('RUL_FD001.txt', header=None, names=['RUL_real'])
+    rul_verdadeiro = pd.read_csv('CMAPSSData/RUL_FD001.txt', header=None, names=['RUL_real'])
     rul_verdadeiro = rul_verdadeiro['RUL_real'].values
 
     #Armazenando o maior ciclo de cada motor

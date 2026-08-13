@@ -11,9 +11,9 @@ def modelo(janela, teto, x_treino, x_val, y_treino_norm, y_val_norm, y_val, df, 
     
     modelo = Sequential([
     LSTM(64, return_sequences=True, input_shape=(janela, x_treino.shape[2])),
-    Dropout(0.2),
+    Dropout(0.4),
     LSTM(32),
-    Dropout(0.2),
+    Dropout(0.4),
     Dense(1)
     ])
     
@@ -27,7 +27,7 @@ def modelo(janela, teto, x_treino, x_val, y_treino_norm, y_val_norm, y_val, df, 
     
     early_stop = EarlyStopping(
         monitor='val_loss',
-        patience=15,
+        patience=20,
         restore_best_weights=True
     )
     
