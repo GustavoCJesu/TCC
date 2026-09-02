@@ -66,24 +66,41 @@ def normalizacao(df, df_teste, janela=30, RUL_MAX=125):
     y_treino_norm = y_treino / RUL_MAX
     y_val_norm = y_val / RUL_MAX
 
-    # teste (igual ao seu)
+    # Teste: cada motor vira UMA janela, a mais recente disponível.
     x_teste = []
+    motores_preenchidos = []
+
     for motor in df_teste['unit_number'].unique():
-        
+
         dados_motor = df_teste[df_teste['unit_number'] == motor]
         sensores = dados_motor[col_sensores].values
-        
+
         if len(sensores) >= janela:
             ultima_janela = sensores[-janela:]
-            
+
         else:
+            # A série é mais curta que a janela. Repetimos a primeira leitura
+            # para trás, assumindo que o motor estava em estado semelhante
+            # antes do início da medição. Isso FABRICA dados: os ciclos
+            # preenchidos não foram observados. No FD001 a menor série de
+            # teste tem 31 ciclos, então isso só dispara com janela >= 32.
             faltam = janela - len(sensores)
             preenchimento = np.repeat(sensores[0:1], faltam, axis=0)
             ultima_janela = np.vstack([preenchimento, sensores])
-            
+            motores_preenchidos.append((int(motor), len(sensores), faltam))
+
         x_teste.append(ultima_janela)
-        
+
     x_teste = np.array(x_teste)
+
+    if motores_preenchidos:
+        print(f'\n[ATENÇÃO] janela={janela} é maior que a série de '
+              f'{len(motores_preenchidos)} motor(es) de teste. '
+              f'Ciclos foram preenchidos artificialmente:')
+        for m, n, f in motores_preenchidos[:10]:
+            print(f'  motor {m}: {n} ciclos reais + {f} preenchidos')
+        print('  As métricas desses motores não são confiáveis. '
+              'Considere reduzir a janela.\n')
 
     return x_treino, x_val, y_treino_norm, y_val_norm, scaler, col_sensores, col_remove, y_val, x_teste
     
