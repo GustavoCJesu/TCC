@@ -68,24 +68,40 @@ def calcula_faixas(previsto, real, limites=(0, 50, 100, 150)):
 # ---------------------------------------------------------------------------
 
 LIMITES_SAUDE = (50, 100)
-NOMES_SAUDE = ('Crítico (<50)', 'Atenção (50-100)', 'Saudável (>=100)')
+SAUDAVEL, ATENCAO, PERIGOSO = 0, 1, 2
+NOMES_SAUDE = ('Saudável (>=100)', 'Atenção (50-100)', 'Perigoso (<50)')
 
 
 def classe_saude(rul, limites=LIMITES_SAUDE):
-    """Converte RUL em ciclos para a classe de estado de saúde.
-    0 = crítico, 1 = atenção, 2 = saudável."""
-    return np.digitize(rul, limites)
+    return len(limites) - np.digitize(rul, limites)
+
+
+def avalia_triagem(prob_nao_saudavel, rul_real, teto, limiar,
+                   limite=LIMITES_SAUDE[-1]):
+    real = np.clip(rul_real, 0, teto) < limite
+    previsto = prob_nao_saudavel >= limiar
+
+    vp = int((real & previsto).sum())
+    fn = int((real & ~previsto).sum())
+    fp = int((~real & previsto).sum())
+    vn = int((~real & ~previsto).sum())
+    acuracia = (vp + vn) / len(real)
+    recall = vp / (vp + fn) if vp + fn else 0.0
+    precisao = vp / (vp + fp) if vp + fp else 0.0
+
+    print(f'\n===== MODELO 1: TRIAGEM (saudável x não saudável, '
+          f'limiar={limiar:.2f}) =====')
+    print(f'Acurácia : {acuracia:.1%}')
+    print(f'Recall   : {recall:.1%}  (motores degradados que foram enviados ao modelo 2)')
+    print(f'Precisão : {precisao:.1%}  (motores enviados que de fato estavam degradados)')
+    print(f'Falsos negativos (degradado liberado como saudável): {fn}')
+    print(f'Falsos positivos (saudável enviado ao modelo 2)    : {fp}')
+
+    return dict(acuracia=acuracia, recall=recall, precisao=precisao,
+                matriz=np.array([[vn, fp], [fn, vp]]))
 
 
 def avalia_saude(classe_prevista, rul_real, teto, limites=LIMITES_SAUDE):
-    """Avalia a cabeça de classificação.
-
-    Por que classificar em vez de só regredir: detectar a AUSÊNCIA de
-    degradação é fácil (o sinal está plano), enquanto converter 'plano' em um
-    número exato de ciclos é impossível — motores saudáveis idênticos falham
-    entre o ciclo 128 e o 362. A classificação extrai a informação que
-    realmente existe nos sensores.
-    """
     real = classe_saude(np.clip(rul_real, 0, teto), limites)
     n = len(NOMES_SAUDE)
     matriz = np.array([[int(((real == i) & (classe_prevista == j)).sum())
@@ -102,7 +118,7 @@ def avalia_saude(classe_prevista, rul_real, teto, limites=LIMITES_SAUDE):
         print(f'{nome:<20}' + ''.join(f'{v:>10}' for v in matriz[i]) + f'{recall:>9.1%}')
 
     confusao_grave = int(matriz[0, 2] + matriz[2, 0])
-    print(f'\nConfusões crítico <-> saudável: {confusao_grave} '
+    print(f'\nConfusões perigoso <-> saudável: {confusao_grave} '
           f'(são as únicas que importam de verdade)')
 
     return dict(acuracia=acuracia, matriz=matriz,
@@ -126,14 +142,15 @@ def avalia_intervalo(inferior, mediana, superior, rul_real, teto):
     faixas = {}
     for i, (lo, hi) in enumerate(zip((0,) + LIMITES_SAUDE, LIMITES_SAUDE + (10 ** 6,))):
         m = (real >= lo) & (real < hi)
+        nome = NOMES_SAUDE[len(LIMITES_SAUDE) - i]
         if m.sum():
-            faixas[NOMES_SAUDE[i]] = dict(
+            faixas[nome] = dict(
                 n=int(m.sum()),
                 largura=float((superior - inferior)[m].mean()),
                 cobertura=float(dentro[m].mean()))
-            print(f'  {NOMES_SAUDE[i]:<20} n={m.sum():3d}  '
-                  f'largura={faixas[NOMES_SAUDE[i]]["largura"]:6.1f} ciclos  '
-                  f'cobertura={faixas[NOMES_SAUDE[i]]["cobertura"]:.0%}')
+            print(f'  {nome:<20} n={m.sum():3d}  '
+                  f'largura={faixas[nome]["largura"]:6.1f} ciclos  '
+                  f'cobertura={faixas[nome]["cobertura"]:.0%}')
 
     return dict(cobertura=float(dentro.mean()),
                 largura=float((superior - inferior).mean()), faixas=faixas)

@@ -31,41 +31,40 @@ def geraGraficos(historicos, rul_verdadeiro, previsoes, janela, teto,
     """historicos: lista com o histórico de cada modelo do ensemble.
     previsoes: dict com 'classe', 'inferior', 'mediana', 'superior'."""
 
-    prev_teste = previsoes['mediana']
+    enviado = previsoes['enviado']
+    prev_teste = previsoes['rul'][enviado]
 
     sufixo = f'Teto-{teto}-Janela-{janela}'
 
-    # O modelo não pode prever acima do teto, então a referência também é
-    # limitada — mesmo critério usado nas métricas.
-    real = np.clip(rul_verdadeiro, 0, teto)
+    real = np.clip(rul_verdadeiro, 0, teto)[enviado]
 
     print('\n===== GRÁFICOS =====')
 
-    # ---------- 1. Curva de aprendizado (média do ensemble) ----------
-    n_ep = min(len(h.history['loss']) for h in historicos)
-    treino = np.array([h.history['loss'][:n_ep] for h in historicos])
-    val = np.array([h.history['val_loss'][:n_ep] for h in historicos])
-    ep = np.arange(1, n_ep + 1)
+    fig, eixos = plt.subplots(1, 2, figsize=(14, 5))
+    for ax, chave, titulo in [(eixos[0], 'triagem', 'Modelo 1 — triagem'),
+                              (eixos[1], 'diagnostico', 'Modelo 2 — diagnóstico')]:
+        hist = historicos[chave]
+        n_ep = min(len(h.history['loss']) for h in hist)
+        treino = np.array([h.history['loss'][:n_ep] for h in hist])
+        val = np.array([h.history['val_loss'][:n_ep] for h in hist])
+        ep = np.arange(1, n_ep + 1)
 
-    plt.figure(figsize=(10, 5))
-    for serie, cor, rotulo in [(treino, AZUL, 'Treino'),
-                               (val, LARANJA, 'Validação')]:
-        plt.fill_between(ep, serie.min(axis=0), serie.max(axis=0),
-                         color=cor, alpha=0.18, linewidth=0)
-        plt.plot(ep, serie.mean(axis=0), color=cor, linewidth=2, label=rotulo)
+        for serie, cor, rotulo in [(treino, AZUL, 'Treino'),
+                                   (val, LARANJA, 'Validação')]:
+            ax.fill_between(ep, serie.min(axis=0), serie.max(axis=0),
+                            color=cor, alpha=0.18, linewidth=0)
+            ax.plot(ep, serie.mean(axis=0), color=cor, linewidth=2, label=rotulo)
 
-    plt.title(f'Curva de Aprendizado — média de {len(historicos)} modelos '
-              f'(faixa = mínimo a máximo)')
-    plt.xlabel('Época')
-    plt.ylabel('Perda (MSE, escala normalizada)')
-    plt.legend(frameon=False)
-    plt.grid(True, alpha=0.25, linewidth=0.6)
-    plt.gca().set_axisbelow(True)
+        ax.set_title(titulo)
+        ax.set_xlabel('Época')
+        ax.set_ylabel('Perda')
+        ax.legend(frameon=False)
+        ax.grid(True, alpha=0.25, linewidth=0.6)
+        ax.set_axisbelow(True)
     _finaliza(f'grafico_curva_treino-{sufixo}.png')
 
-    # ---------- 2. Previsto vs Real ----------
     plt.figure(figsize=(7, 7))
-    lim = max(real.max(), prev_teste.max()) * 1.03
+    lim = max(real.max(initial=1), prev_teste.max(initial=1)) * 1.03
     plt.plot([0, lim], [0, lim], '--', color=CINZA, linewidth=1.5,
              label='Previsão perfeita', zorder=1)
     plt.scatter(real, prev_teste, s=45, color=AZUL, alpha=0.75,
@@ -73,7 +72,7 @@ def geraGraficos(historicos, rul_verdadeiro, previsoes, janela, teto,
                 label='Motor de teste')
     plt.xlim(0, lim)
     plt.ylim(0, lim)
-    plt.title('RUL Previsto vs. RUL Real (Teste)')
+    plt.title('RUL Previsto vs. RUL Real (motores enviados ao modelo 2)')
     plt.xlabel('RUL Real (ciclos)')
     plt.ylabel('RUL Previsto (ciclos)')
     plt.legend(frameon=False, loc='upper left')
@@ -85,14 +84,10 @@ def geraGraficos(historicos, rul_verdadeiro, previsoes, janela, teto,
     ordem = np.argsort(real)
 
     plt.figure(figsize=(12, 5))
-    plt.fill_between(np.arange(len(ordem)),
-                     previsoes['inferior'][ordem], previsoes['superior'][ordem],
-                     color=LARANJA, alpha=0.18, linewidth=0,
-                     label='Intervalo de 80%')
     plt.plot(real[ordem], color=AZUL, linewidth=2, label='RUL Real')
     plt.plot(prev_teste[ordem], color=LARANJA, linewidth=1.5, alpha=0.9,
-             label='RUL Previsto (mediana)')
-    plt.title('RUL Previsto vs. Real com incerteza — 100 motores (ordenados)')
+             label='RUL Previsto')
+    plt.title(f'RUL Previsto vs. Real — {len(real)} motores enviados ao modelo 2')
     plt.xlabel('Motores (ordenados por RUL real crescente)')
     plt.ylabel('RUL (ciclos)')
     plt.legend(frameon=False)

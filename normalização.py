@@ -4,20 +4,25 @@ import pandas as pd
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.model_selection import train_test_split
 
-from scipy.signal import savgol_filter
+from scipy.signal import savgol_coeffs
+
 
 def suavizar(df, col_sensores, window=7, poly=2):
-    df = df.copy()
-    def f(g):
-        for s in col_sensores:
-            n = len(g)
-            w = window if n >= window else (n if n % 2 == 1 else n - 1)
-            if w > poly:
-                g[s] = savgol_filter(g[s].values, w, poly)
-        return g
-    return df.groupby('unit_number', group_keys=False).apply(f)
+    coef = savgol_coeffs(window, poly, pos=window - 1)
 
-def normalizacao(df, df_teste, janela=30, RUL_MAX=125):
+    def filtra(serie):
+        v = serie.values
+        suave = np.convolve(v, coef, mode='full')[:len(v)]
+        suave[:window - 1] = v[:window - 1]
+        return pd.Series(suave, index=serie.index)
+
+    df = df.copy()
+    for s in col_sensores:
+        df[s] = df.groupby('unit_number')[s].transform(filtra)
+    return df
+
+
+def normalizacao(df, df_teste, janela=30, RUL_MAX=125, suavizacao=False):
     col = [c for c in df.columns if c.startswith('sensor_') or c.startswith('op_setting_')]
     desvios = df[col].std()
     col_remove = desvios[desvios == 0].index
@@ -26,10 +31,9 @@ def normalizacao(df, df_teste, janela=30, RUL_MAX=125):
 
     col_sensores = [c for c in df.columns if c.startswith('sensor_')]
 
-    # >>> SUAVIZAÇÃO ENTRA AQUI: depois do corte, ANTES da normalização <
-    df = suavizar(df, col_sensores, window=7, poly=2)
-    df_teste = suavizar(df_teste, col_sensores, window=7, poly=2)
-
+    if suavizacao:
+        df = suavizar(df, col_sensores)
+        df_teste = suavizar(df_teste, col_sensores)
 
     motores = df['unit_number'].unique()
     m_treino, m_val = train_test_split(motores, test_size=0.2, random_state=42)
